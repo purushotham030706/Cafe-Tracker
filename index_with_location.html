@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Café Tracker with Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      margin: 0 auto;
+      max-width: 720px;
+      padding: 1rem;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    input[type="text"], input[type="date"], textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #cafeList li {
+      background: #fff;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #mapContainer {
+      display: none;
+      margin-top: 1rem;
+      height: 400px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .stats {
+      margin: 1rem 0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Café Tracker</h1>
+
+  <div id="controls">
+    <input type="text" id="cafeInput" placeholder="Add new café...">
+    <button onclick="addCafe()">Add</button>
+    <button onclick="toggleMap()">Toggle Map View</button>
+  </div>
+
+  <div class="stats" id="stats">Loading...</div>
+
+  <ul id="cafeList"></ul>
+
+  <div id="mapContainer"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const cafeList = document.getElementById('cafeList');
+    const stats = document.getElementById('stats');
+    const mapContainer = document.getElementById('mapContainer');
+    let map, markersLayer;
+
+    const getCafes = () => JSON.parse(localStorage.getItem('cafes') || '[]');
+    const saveCafes = (cafes) => localStorage.setItem('cafes', JSON.stringify(cafes));
+
+    function addCafe() {
+      const input = document.getElementById('cafeInput');
+      const name = input.value.trim();
+      if (!name) return;
+      const cafes = getCafes();
+      cafes.push({ name, date: '', notes: '', favorite: false, checked: false, location: null });
+      saveCafes(cafes);
+      input.value = '';
+      render();
+    }
+
+    function updateStats() {
+      const cafes = getCafes();
+      const visited = cafes.filter(c => c.checked).length;
+      const total = cafes.length;
+      const favs = cafes.filter(c => c.favorite).length;
+      stats.textContent = `Visited ${visited} of ${total} cafés • ${favs} favorites`;
+    }
+
+    function render() {
+      const cafes = getCafes();
+      cafeList.innerHTML = '';
+      cafes.forEach((cafe, index) => {
+        const li = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = cafe.checked;
+        checkbox.onchange = () => {
+          cafes[index].checked = checkbox.checked;
+          saveCafes(cafes);
+          render();
+        };
+
+        const span = document.createElement('span');
+        span.textContent = cafe.name;
+        span.style.flex = '1';
+
+        const fav = document.createElement('button');
+        fav.textContent = cafe.favorite ? '★' : '☆';
+        fav.onclick = () => {
+          cafes[index].favorite = !cafes[index].favorite;
+          saveCafes(cafes);
+          render();
+        };
+
+        const del = document.createElement('button');
+        del.textContent = 'Delete';
+        del.style.background = '#e53935';
+        del.style.color = '#fff';
+        del.onclick = () => {
+          cafes.splice(index, 1);
+          saveCafes(cafes);
+          render();
+        };
+
+        row.append(checkbox, span, fav, del);
+
+        const notes = document.createElement('textarea');
+        notes.placeholder = 'Add notes...';
+        notes.value = cafe.notes || '';
+        notes.oninput = () => {
+          cafes[index].notes = notes.value;
+          saveCafes(cafes);
+        };
+
+        const date = document.createElement('input');
+        date.type = 'date';
+        date.value = cafe.date || '';
+        date.onchange = () => {
+          cafes[index].date = date.value;
+          saveCafes(cafes);
+        };
+
+        const locateBtn = document.createElement('button');
+        locateBtn.textContent = '📍 Save My Location';
+        locateBtn.onclick = () => {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            cafes[index].location = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude
+            };
+            saveCafes(cafes);
+            render();
+          });
+        };
+
+        const locationLink = document.createElement('a');
+        if (cafe.location) {
+          locationLink.href = `https://www.google.com/maps?q=${cafe.location.lat},${cafe.location.lng}`;
+          locationLink.target = '_blank';
+          locationLink.textContent = 'View Location';
+        }
+
+        li.append(row, date, notes, locateBtn);
+        if (cafe.location) li.append(locationLink);
+        cafeList.appendChild(li);
+      });
+      updateStats();
+    }
+
+    function toggleMap() {
+      if (mapContainer.style.display === 'block') {
+        mapContainer.style.display = 'none';
+        return;
+      }
+      mapContainer.style.display = 'block';
+      if (!map) {
+        map = L.map('mapContainer').setView([12.2958, 76.6394], 12); // Default Mysuru
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: 'Map data © OpenStreetMap contributors'
+        }).addTo(map);
+        markersLayer = L.layerGroup().addTo(map);
+      }
+      markersLayer.clearLayers();
+      getCafes().forEach(cafe => {
+        if (cafe.location) {
+          L.marker([cafe.location.lat, cafe.location.lng])
+            .addTo(markersLayer)
+            .bindPopup(`<strong>${cafe.name}</strong><br>${cafe.notes || ''}`);
+        }
+      });
+    }
+
+    if (!localStorage.getItem('cafes')) {
+      const defaultCafes = [
+        "Sihi", "Leaven", "Bella Italiano", "Tao Bao", "Swadeshi", "Jini’s", "Sorrento",
+        "Malgudi Coffee Shop", "Minimal", "Pizzaiolo", "Atmosphere", "Sutra Bistro",
+        "Zlash", "Starbucks", "Folki", "Firangi Grubs", "Brioche Dorée", "Sapa",
+        "White Teak", "Mile High Roasters", "Vui Coffee", "Hideaway", "BigCup",
+        "Tusk", "Iconic", "Bonsai Cafe"
+      ].map(name => ({ name, date: '', notes: '', favorite: false, checked: false, location: null }));
+      saveCafes(defaultCafes);
+    }
+
+    render();
+  </script>
+</body>
+</html>
