@@ -70,6 +70,6 @@ Contact
 Email: purushothambm2006@gmail.com
 GitHub: https://github.com/purushotham030706
 
-📝 Note
+Note
 
 This project is part of my learning journey as a Computer Science Engineering student and is actively being improved as I work toward full-stack development.
